@@ -1,3 +1,27 @@
+# Stock Finder
+
+Introducing a investment aid tool that harnesses the power of
+cutting-edge research, media sentiment, and stock market performance to iden-
+tify potentially undervalued opportunities in industries with substantial research
+output. By tapping into arXiv’s database, the tool identifies industries with the
+highest number of research publications in a user-specified time frame, signifying
+sectors on the verge of innovation and growth. This industry becomes the focal
+point for sentiment analysis through Marketaux, capturing media sentiment on
+companies within the industry. Leveraging Yahoo Finance data, the tool then
+cross-references stock performances, pinpointing companies that, while riding
+high on positive media sentiment, haven’t yet experienced significant stock ap-
+preciation. This seamless integration offers users a curated list of companies
+positioned in high-research industries, enjoying favorable media outlook, yet
+potentially undervalued in the stock market. Hosted on AWS’s reliable EC2
+platform and featuring a user-friendly React front-end and a backend built with
+node, this tool bridges the gap between academia, media, and financial markets,
+presenting an invaluable asset for long-term investors seeking untapped growth
+potential or short-term investors looking for over hyped companies which have
+not yet seen corrections in their share price.
+
+
+
+
 # Getting Started with Create React App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
