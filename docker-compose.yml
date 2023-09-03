@@ -1,0 +1,10 @@
+version: '3'
+services:
+  stock_finder:
+    image: stock_finder
+    volumes:
+      - type: bind
+        source: C:/Users/zachw/PROJECTS/Stock_Finder
+        target: /app
+    ports:
+      - "3001:3000"
