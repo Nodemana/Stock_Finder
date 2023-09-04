@@ -1,7 +1,13 @@
+import React, { useState } from 'react';  // Import useState hook
 import './App.css';
-import Dropdown from './Dropdown';
+import Dropdown from './components/Dropdown';
 
 function App() {
+
+  const [position, setPosition] = useState(null);  // State to keep track of selected position
+  const [lookbackPeriod, setLookbackPeriod] = useState(null);  // State to keep track of selected look-back period
+  const [error, setError] = useState(null);  // State for error message
+
 
   const positionOptions = [
     { value: 'longlongterm', label: 'Long, Long Term' },
@@ -17,10 +23,38 @@ function App() {
 
   const handlePositionChange = (newPosition) => {
     console.log(`Selected position: ${newPosition}`);
+    setPosition(newPosition);  // Update the state
+    setError(null);  // Reset error when a new value is selected
   };
 
   const handleLookBackChange = (newLookBack) => {
     console.log(`Selected Look-back Period: ${newLookBack}`);
+    setLookbackPeriod(newLookBack);  // Update the state
+    setError(null);  // Reset error when a new value is selected
+  };
+
+  // Function to send data to server
+  const sendDataToServer = () => {
+     // Check if both dropdowns have a value selected
+     if (!position || !lookbackPeriod) {
+      setError('Please select both a position and a look-back period.');  // Set the error message
+      return;
+    }
+    console.log(lookbackPeriod)
+    fetch('http://localhost:4000/api/findstocks', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ position, lookbackPeriod }),
+    })
+    .then(response => response.json())
+    .then(data => {
+      console.log('Data sent to server:', data);
+    })
+    .catch((error) => {
+      console.error('Error sending data:', error);
+    });
   };
 
 
@@ -49,6 +83,11 @@ function App() {
         label="Select a look-back period"
         onChange={handleLookBackChange}
       />
+      {/* Button to send data to server */}
+      {error && <div className="error-message">{error}</div>}
+      <button onClick={sendDataToServer}>
+          Find Stocks
+        </button>
       </body>
     </div>
   );
