@@ -7,7 +7,8 @@ function App() {
   const [position, setPosition] = useState(null);  // State to keep track of selected position
   const [lookbackPeriod, setLookbackPeriod] = useState(null);  // State to keep track of selected look-back period
   const [error, setError] = useState(null);  // State for error message
-
+  const [stocks, setStocks] = useState([]);
+  const [industry, setIndustry] = useState(null);
 
   const positionOptions = [
     { value: 'longlongterm', label: 'Long, Long Term' },
@@ -50,6 +51,8 @@ function App() {
     })
     .then(response => response.json())
     .then(data => {
+      setStocks(data.stocks);
+      setIndustry(data.industry);
       console.log('Data sent to server:', data);
     })
     .catch((error) => {
@@ -69,6 +72,8 @@ function App() {
 
       <body className="App-body">
       <h2>Enter Your Preferences</h2>
+      <p>This application returns five stocks suitable for your desired position in the market and in sectors with a plethora of research.
+        First select your position that you wish to take in the market. Then you select how far back your interested in querying for new research. </p>
       <h3>Select your position</h3>
       <Dropdown
         options={positionOptions}
@@ -88,6 +93,33 @@ function App() {
       <button onClick={sendDataToServer}>
           Find Stocks
         </button>
+        <p>After querying ArXiv for ifn</p>
+        <div className="stock-data">
+                {stocks.length > 0 && (
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Ticker</th>
+                                <th>1 Month %</th>
+                                <th>3 Months %</th>
+                                <th>1 Year %</th>
+                                <th>Media Sentiment</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {stocks.map((stock, index) => (
+                                <tr key={index}>
+                                    <td>{stock.symbol}</td>
+                                    <td>{stock.one_mo_perc.toFixed(2)}%</td>
+                                    <td>{stock.three_mo_perc.toFixed(2)}%</td>
+                                    <td>{stock.one_y_perc.toFixed(2)}%</td>
+                                    <td>{stock.sentiment}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
+            </div>
       </body>
     </div>
   );
