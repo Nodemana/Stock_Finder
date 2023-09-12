@@ -1,7 +1,6 @@
 const { fetchARXIVData, fetchMediaData, fetchFinanceData } = require('../utils/apiFetch');
 const { symbolSector, findKeysByValue} = require ('../utils/tickerDictionary');
-const { Ticker, TickerModel } = require('../classes/ticker.js');
-const { determineValuableTickers } = require('../utils/dataAggregation.js');
+const { determineValuableTickers, determineBestBuys } = require('../utils/dataAggregation.js');
 const { pushtoDB } = require('../utils/dbFunctions.js');
 
 const arxivToMarketAuxIndustries = {
@@ -56,7 +55,7 @@ exports.performApiMashup = async (req, res) => {
     try {
 
         // Wait for fetchARXIVData to complete and get the result
-      let arxivResult = await fetchARXIVData(lookbackPeriod);
+      let arxivResult = await fetchARXIVData(lookbackPeriod, position);
         // Get the corresponding industry from the result's category
       let industry = ArxivCategoryToSector[arxivResult.mostPapersCategory];
       //console.log(`For the Category ${arxivResult.mostPapersCategory} we got the industry ${industry} with ${arxivResult.mostPapers} total papers in ${lookbackPeriod} months`);
@@ -67,10 +66,11 @@ exports.performApiMashup = async (req, res) => {
   
       let yahoofinanceResult = await fetchFinanceData(position, tickers);
       let valuableTickers = determineValuableTickers(yahoofinanceResult, position);
-      let reducedValuableTickers = valuableTickers.slice(0, 5);
+      let reducedValuableTickers = valuableTickers.slice(0, 10);
 
       let marketauxResult = await fetchMediaData(reducedValuableTickers, position);
-      console.log(marketauxResult);
+      let bestBuys = determineBestBuys(marketauxResult, position);
+      console.log(bestBuys);
 
       // Respond back to the frontend with the new data
       res.json({
@@ -78,7 +78,7 @@ exports.performApiMashup = async (req, res) => {
         position,
         lookbackPeriod,
         industry,
-        stocks: marketauxResult,
+        stocks: bestBuys,
         paperCount: arxivResult.paperCount
       });
 

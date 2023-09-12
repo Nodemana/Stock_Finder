@@ -1,7 +1,10 @@
 const axios = require('axios');
 const xml2js = require('xml2js');
+const util = require('util');
+const fetch = require('node-fetch');
+
 require('dotenv').config();
-const { checkFinanceData, checkMediaData } = require('../utils/dbFunctions.js');
+const { checkFinanceData, checkMediaData, checkArxivData } = require('../utils/dbFunctions.js');
 
 const { Ticker, TickerModel } = require('../classes/ticker.js');
 const { PaperCountModel, VisitCountModel } = require('../classes/countSchema.js');
@@ -34,9 +37,6 @@ const arxivCategories = [
 // Query Delay Time
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Cache Values, will add to DynamoDB later
-let cache = {};
-
   // Formats the current date into a string suitable for a ArXiv query.
 const getArxivCurrentDate = () => {
     // Create a new Date object
@@ -62,77 +62,94 @@ const getArxivCurrentDate = () => {
   
 
 
-  const getArxivCount = async (category, lookbackPeriod) => {
-    const existingcount = await PaperCountModel.findOne({industry: category, lookback_period: lookbackPeriod})
+
+
+// Promisify the xml2js.parseString function
+const parseStringPromise = util.promisify(xml2js.parseString);
+
+const getArxivCount = async (category, lookbackPeriod) => {
+    const existingcount = await PaperCountModel.findOne({industry: category, lookback_period: lookbackPeriod});
+    let overwrite_flag = false;
     
     if (existingcount) {
-        return existingcount.count;
-      }
+        if(await checkArxivData(existingcount) == true) {
+            return existingcount.count;
+        } else {
+            overwrite_flag = true;
+        }
+    }
+
+    console.log("Fetching new data from Arxiv API...");
+
     // Wait for 3.5 seconds before the next API call
-    await delay(3000);
+    await delay(1000);
+    
     const date = new Date();
     date.setMonth(date.getMonth() - lookbackPeriod);
     const startDate = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}0000`;
     const currentDate = getArxivCurrentDate();
     
-    //DEUBG
-    //console.log(`Start Date: ${startDate}`);
-    //console.log(`Current Date: ${currentDate}`);
+    const apiUrl = `https://export.arxiv.org/api/query?search_query=cat:${category}*+AND+submittedDate:[${startDate}+TO+${currentDate}]&max_results=1000`;
 
-    const apiUrl = `https://export.arxiv.org/api/query?search_query=cat:${category}*+AND+submittedDate:[${startDate}+TO+${currentDate}]&max_results=1000`;  
+    const response = await fetch(apiUrl);
+    const data = await response.text();
+    const result = await parseStringPromise(data);
 
-  
-  const response = await fetch(apiUrl);
-  const data = await response.text();
-
-  return new Promise((resolve, reject) => {
-    xml2js.parseString(data, (err, result) => {
-      if (err) {
-        return reject(err);
-      }
-      
-      //console.log(`Parsed XML for ${category}:`, result);
-
-      if (result.feed && result.feed['opensearch:totalResults']) {
+    if (result.feed && result.feed['opensearch:totalResults']) {
         const totalResults = result.feed['opensearch:totalResults'][0];
-        const count = totalResults['_']; 
-        console.log(`Total Results for ${category}:`, count);
-        let new_PaperCount = new PaperCountModel({industry: category, lookback_period: lookbackPeriod, count: count});
-        new_PaperCount.save();
-        resolve(parseInt(count, 10));
-      } else {
+        const count = totalResults['_'];
+        //console.log(`Total Results for ${category}:`, count);
+
+        if (overwrite_flag) {
+            existingcount.set({count: count, updatedAt: now});
+            await existingcount.save();
+        } else {
+            let new_PaperCount = new PaperCountModel({industry: category, lookback_period: lookbackPeriod, count: count, updatedAt: now});
+            await new_PaperCount.save();
+        }
+        return count;
+    } else {
         console.log(`No total results for ${category}`);
-        resolve(0);
-      }
-    });
-  });
+        return 0;
+    }
 };
   
   
 
 
-const getTotalPapersInMonths = async (lookbackPeriod) => {
-        let mostPapers = 0;
-        let mostPapersCategory = null;
+const getTotalPapersInMonths = async (lookbackPeriod, position) => {
+  console.log("Gathering Research Data...")
+  let mostPapers = 0;
+  let mostPapersCategory = null;
       
-        for (const category of arxivCategories) {
-          const count = await getArxivCount(category, lookbackPeriod);
-          console.log(`Category: ${category}, Papers: ${count}`);
+  for (const category of arxivCategories) {
+    const count = await getArxivCount(category, lookbackPeriod);
+    console.log(`Category: ${category}, Papers: ${count}`);
       
-          // Check if this category has more papers than the previous maximum
-          if (count > mostPapers) {
-            mostPapers = count;
-            mostPapersCategory = category;
-          }
-        }
-      
-        console.log(`Category with the most papers published in the last ${lookbackPeriod} months: ${mostPapersCategory} with ${mostPapers} papers.`);
-        return { mostPapersCategory, mostPapers };
-    };
+    // Check if this category has more papers than the previous maximum
+    if(position != "short"){
+      if (count > mostPapers) {
+        mostPapers = count;
+        mostPapersCategory = category;
+      }
+    }else{
+      if(mostPapers == 0){
+        mostPapers = count;
+      }
+      if (count < mostPapers) {
+        mostPapers = count;
+        mostPapersCategory = category;
+      }
+    }
+    console.log(mostPapers);
+    console.log(mostPapersCategory);
+  }
+  return { mostPapersCategory, mostPapers };
+};
 
-exports.fetchARXIVData = async (lookbackPeriod) => {
+exports.fetchARXIVData = async (lookbackPeriod, position) => {
     try {
-        const result = await getTotalPapersInMonths(lookbackPeriod);
+        const result = await getTotalPapersInMonths(lookbackPeriod, position);
         console.log(`The category with the most papers is ${result.mostPapersCategory}`);
         return result;
     } catch (error) {
@@ -141,30 +158,47 @@ exports.fetchARXIVData = async (lookbackPeriod) => {
 };
 
 const constructMediaQuery = async (ticker) => {
-  const apiUrl = `https://api.marketaux.com/v1/news/all?symbols=${ticker.symbol}&filter_entities=true&language=en&api_token=${process.env.MARKETAUX_API_KEY}`
+  const apiUrl = `https://api.marketaux.com/v1/news/all?symbols=${ticker.symbol}&filter_entities=true&language=en&api_token=${process.env.MARKETAUX_API_KEY}`;
+  
   const response = await fetch(apiUrl);
-  const data = await response.json();
+  
+  // Check if the response status is not OK (not in the 200-299 range)
+  if (!response.ok) {
+    const data = await response.json();
+    if (data.error) {
+      throw new Error(data.error.message);
+    }
+    throw new Error('Unknown API error');
+  }
 
-  return data
+  return await response.json();
 }
 
 const getMediaSentiment = async (tickers) => {
+  console.log("Gathering Media Data...")
   for(ticker of tickers){
     const existingTicker = await TickerModel.findOne({ symbol: ticker.symbol });
     if (existingTicker) {
-      if(checkMediaData == true){
+      if(await checkMediaData(existingTicker) == true){
+        console.log("I should be here");
         ticker.sentiment = existingTicker.sentiment;
       }else {
-      const MediaResult = await constructMediaQuery(ticker);
-      const average_sentiment = (MediaResult.data[0].entities[0].sentiment_score + MediaResult.data[1].entities[0].sentiment_score + MediaResult.data[2].entities[0].sentiment_score) / 3;
-      console.log(average_sentiment);
-      ticker.sentiment = average_sentiment;
-
-      existingTicker.set({
-        sentiment: ticker.sentiment,
-        media_updatedAt: now // Update the timestamp
-    });
-    await existingTicker.save();
+        try {
+          const MediaResult = await constructMediaQuery(ticker);
+          if(MediaResult.data.length != 0){
+            const average_sentiment = (MediaResult.data[0].entities[0].sentiment_score + MediaResult.data[1].entities[0].sentiment_score + MediaResult.data[2].entities[0].sentiment_score) / 3;
+            console.log(average_sentiment);
+            ticker.sentiment = average_sentiment;
+  
+            existingTicker.set({
+              sentiment: ticker.sentiment,
+              media_updatedAt: now // Update the timestamp
+            });
+            await existingTicker.save();
+          }
+        } catch (error) {
+          console.error('Error fetching media data:', error.message);
+        }
       }
     } else {
       console.log("A Serious DB Error Has Occured.")
@@ -187,6 +221,7 @@ exports.fetchMediaData = async (tickers, position) => {
 };
 
 const constructFinanceQuery = async (symbol) => {
+  await delay(1000);
   const options = {
     method: 'GET',
     url: `https://yahoo-finance127.p.rapidapi.com/historic/${symbol}/1mo/1y`,
@@ -206,7 +241,7 @@ const constructFinanceQuery = async (symbol) => {
 }
 
 const getStockData = async (tickers) => {
-  //console.log(tickers);
+  console.log("Gathering Financial Data...")
   for (let ticker of tickers) {
       try {
         const existingTicker = await TickerModel.findOne({ symbol: ticker.symbol });
@@ -223,7 +258,6 @@ const getStockData = async (tickers) => {
                   ticker.one_y_perc = existingTicker.one_y_perc;
                   
           }else{
-            console.log("before Query");
             // Otherwise, fetch the financial data and update the database
             let data = await constructFinanceQuery(ticker.symbol);
             if (data && data.indicators && data.indicators.quote && data.indicators.quote[0]) {
@@ -249,7 +283,6 @@ const getStockData = async (tickers) => {
                 console.warn("Unexpected data structure for ticker:", ticker.symbol, data);
             }
           }
-          await delay(100);
         } 
     } catch (error) {
       console.error(`Error processing ticker`, error);
