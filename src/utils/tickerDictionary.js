@@ -5,7 +5,6 @@ const symbolSector = {"MMM": "Industrials", "AOS": "Industrials", "ABT": "Health
 
 exports.findKeysByValue = (object, value) => {
     let keys = [];
-    console.log("Hi");
     for (let key in object) {
         if (object.hasOwnProperty(key) && object[key] === value) {
             let ticker = new Ticker({symbol: key, industry: value});

@@ -19,10 +19,8 @@ services:
       dockerfile: Dockerfile.server
     ports:
       - "4000:4000"
-    environment:
-      - MARKETAUX_API_KEY=${MARKETAUX_API_KEY}
-      - YAHOO_HOST=${YAHOO_HOST}
-      - XRAPIDAPIKEY=${XRAPIDAPIKEY}
+    env_file:
+    - /src/.env
     depends_on:
       - db
 

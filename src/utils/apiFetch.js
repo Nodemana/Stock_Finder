@@ -119,6 +119,7 @@ const getArxivCount = async (category, lookbackPeriod) => {
 
 const getTotalPapersInMonths = async (lookbackPeriod, position) => {
   console.log("Gathering Research Data...")
+  console.log(position);
   let mostPapers = 0;
   let mostPapersCategory = null;
       
@@ -149,6 +150,7 @@ const getTotalPapersInMonths = async (lookbackPeriod, position) => {
 
 exports.fetchARXIVData = async (lookbackPeriod, position) => {
     try {
+        console.log(position);
         const result = await getTotalPapersInMonths(lookbackPeriod, position);
         console.log(`The category with the most papers is ${result.mostPapersCategory}`);
         return result;
@@ -180,10 +182,11 @@ const getMediaSentiment = async (tickers) => {
     const existingTicker = await TickerModel.findOne({ symbol: ticker.symbol });
     if (existingTicker) {
       if(await checkMediaData(existingTicker) == true){
-        console.log("I should be here");
+        //console.log("I should be here");
         ticker.sentiment = existingTicker.sentiment;
       }else {
         try {
+          console.log("Querying Media API");
           const MediaResult = await constructMediaQuery(ticker);
           if(MediaResult.data.length != 0){
             const average_sentiment = (MediaResult.data[0].entities[0].sentiment_score + MediaResult.data[1].entities[0].sentiment_score + MediaResult.data[2].entities[0].sentiment_score) / 3;
